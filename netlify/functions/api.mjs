@@ -1,5 +1,5 @@
 import { getStore } from '@netlify/blobs';
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { defaults } from './defaults.mjs';
 const cookieName='ra_admin';
 function json(v,status=200,headers={}){return new Response(JSON.stringify(v),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',...headers}})}
@@ -8,13 +8,50 @@ function sameOrigin(req){try{return new URL(req.headers.get('origin')).origin===
 function validState(v){if(!v||typeof v!=='object'||!Array.isArray(v.pages)||!Array.isArray(v.products)||v.pages.length>30||v.products.length>300)return false;const str=JSON.stringify(v);return str.length<550000&&v.pages.every(p=>typeof p.id==='string'&&typeof p.name==='string'&&Array.isArray(p.sections)&&p.sections.length<100)&&v.products.every(p=>typeof p.id==='string'&&typeof p.name==='string'&&Number.isFinite(Number(p.price))&&Number(p.price)>=0)}
 async function site(){const store=getStore('ra-calcados-editor-site');return await store.get('site',{type:'json'})||structuredClone(defaults)}
 function safeModelState(current){return {brand:current.brand,theme:current.theme,pages:current.pages,products:current.products,notice:current.notice}}
+const maxImageBytes = 4 * 1024 * 1024;
+const imageTypes = {jpg:'image/jpeg',png:'image/png',gif:'image/gif',webp:'image/webp'};
+
+function imageExtension(bytes) {
+  if (bytes.length < 12) return null;
+  if (bytes.subarray(0, 3).toString('hex') === 'ffd8ff') return 'jpg';
+  if (bytes.subarray(0, 8).toString('hex') === '89504e470d0a1a0a') return 'png';
+  if (['GIF87a','GIF89a'].includes(bytes.toString('ascii',0,6))) return 'gif';
+  if (bytes.toString('ascii',0,4)==='RIFF' && bytes.toString('ascii',8,12)==='WEBP') return 'webp';
+  return null;
+}
+
+async function uploadImage(req) {
+  if (!auth(req)) return json({erro:'Entre com sua senha de administrador.'},401);
+  if (Number(req.headers.get('content-length')) > maxImageBytes) return json({erro:'Imagem acima de 4 MB.'},413);
+  const bytes = Buffer.from(await req.arrayBuffer());
+  if (bytes.length > maxImageBytes) return json({erro:'Imagem acima de 4 MB.'},413);
+  const extension = imageExtension(bytes);
+  if (!extension) return json({erro:'Use uma imagem JPG, PNG, WebP ou GIF.'},415);
+  const key = createHash('sha256').update(bytes).digest('hex')+'.'+extension;
+  await getStore({name:'ra-calcados-images',consistency:'strong'}).set(key,bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
+  return json({url:'/api?action=image&id='+key});
+}
+
+async function readImage(key) {
+  if (!/^[a-f0-9]{64}\.(jpg|png|gif|webp)$/.test(key || '')) return new Response(null,{status:404});
+  const bytes = await getStore({name:'ra-calcados-images',consistency:'strong'}).get(key,{type:'arrayBuffer'});
+  if (!bytes) return new Response(null,{status:404});
+  return new Response(bytes,{headers:{
+    'Content-Type':imageTypes[key.split('.').pop()],
+    'X-Content-Type-Options':'nosniff',
+    'Cache-Control':'public, max-age=31536000, immutable'
+  }});
+}
+
 export default async function handler(req){
   const url=new URL(req.url),action=url.searchParams.get('action')||'site';
   try {
+    if(req.method==='GET'&&action==='image')return await readImage(url.searchParams.get('id'));
     if(req.method==='GET'&&action==='site')return json(await site());
     if(req.method==='GET'&&action==='session')return json({loggedIn:auth(req),aiConfigured:!!process.env.OPENAI_API_KEY});
     if(req.method!=='POST')return json({erro:'Método não permitido.'},405);
     if(!sameOrigin(req))return json({erro:'Origem inválida.'},403);
+    if(action==='upload-image')return await uploadImage(req);
     const input=await req.json().catch(()=>({}));
     if(action==='login'){
       const pass=process.env.ADMIN_PASSWORD,secret=process.env.SESSION_SECRET;
@@ -30,7 +67,7 @@ export default async function handler(req){
     if(action==='save'){
       const next=input.site;
       if(!validState(next))return json({erro:'Dados inválidos ou projeto muito grande.'},400);
-      const clean={brand:String(next.brand||'RA CALÇADOS').slice(0,80),whatsapp:String(next.whatsapp||'5516994623076').replace(/\D/g,'').slice(0,15),instagram:String(next.instagram||'').slice(0,100),theme:next.theme||defaults.theme,pages:next.pages,products:next.products,notice:String(next.notice||'').slice(0,500),updatedAt:new Date().toISOString()};
+      const clean={brand:String(next.brand||'RA CALÇADOS').slice(0,80),whatsapp:String(next.whatsapp||'5516994623076').replace(/\D/g,'').slice(0,15),instagram:String(next.instagram||'').slice(0,100),theme:next.theme||defaults.theme,copy:Object.fromEntries(Object.entries(next.copy||{}).filter(([,value])=>typeof value==='string').map(([key,value])=>[key,value.slice(0,500)])),pages:next.pages,products:next.products,notice:String(next.notice||'').slice(0,500),updatedAt:new Date().toISOString()};
       await getStore('ra-calcados-editor-site').setJSON('site',clean);
       return json({ok:true,updatedAt:clean.updatedAt});
     }
