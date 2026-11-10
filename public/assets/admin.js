@@ -236,19 +236,27 @@ if(tab==='ia'){root.innerHTML=`<h3>Editar com IA ✨</h3><p class="hint">Descrev
 }
 function renderVariants(card, product) {
   const details = card.querySelector('details');
+  const shortcuts = document.createElement('div');
+  shortcuts.innerHTML = `<p class="hint">Cores: ${e([product.color || 'Principal', ...(product.variants || []).map(v=>v.color || 'Sem nome')].join(', '))}</p><button type="button" class="btn outline small" data-add-color>+ Adicionar cor</button>`;
+  card.insertBefore(shortcuts, details);
   const area = document.createElement('div');
-  area.innerHTML = '<h4>Cores do mesmo modelo</h4><button type="button" class="btn outline small" data-add-color>+ Adicionar cor</button>';
+  area.innerHTML = '<h4>Cores do mesmo modelo</h4><p class="hint">Cada cor pode ter nome, foto, preço e tamanhos próprios. Depois, clique em Publicar alterações.</p><button type="button" class="btn outline small" data-add-color>+ Adicionar outra cor</button>';
   details.appendChild(area);
-  area.querySelector('[data-add-color]').onclick = () => {
+  const addColor = () => {
     product.variants ??= [];
-    product.variants.push({id:uid(),color:'Nova cor',image:'',price:product.price,sizes:product.sizes});
+    const id = uid();
+    product.variants.push({id,color:'Nova cor',image:'',price:product.price,sizes:product.sizes});
     openProducts.add(product.id);
     dirty(); refresh();
+    const input = document.getElementById('variant-color-' + id);
+    if (input) { input.scrollIntoView({block:'center',behavior:'smooth'}); input.focus(); input.select(); }
   };
+  shortcuts.querySelector('[data-add-color]').onclick = addColor;
+  area.querySelector('[data-add-color]').onclick = addColor;
   (product.variants || []).forEach(variant => {
     const item = document.createElement('div');
     item.className = 'card-admin';
-    item.innerHTML = `<label>Nome da cor<input data-variant="color" value="${e(variant.color)}"></label>
+    item.innerHTML = `<label>Nome da cor<input id="variant-color-${e(variant.id)}" data-variant="color" value="${e(variant.color)}"></label>
       <label>Preço desta cor (R$)<input type="number" min="0" step="0.01" data-variant="price" value="${e(variant.price ?? product.price)}"></label>
       <label>Tamanhos desta cor<input data-variant="sizes" value="${e(variant.sizes ?? product.sizes)}"></label>
       <label>Foto desta cor (URL)<input data-variant="image" value="${e(variant.image||'')}"></label>
