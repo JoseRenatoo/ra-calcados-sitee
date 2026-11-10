@@ -55,7 +55,8 @@ function layoutSnapshot(target, part) {
   return [
     RA.verticalOffset(target[part+'X']),
     RA.verticalOffset(target[part+'Y']),
-    RA.elementScale(target[part+'Scale'])
+    RA.elementScale(target[part+'Scale']),
+    ...Object.keys(RA.layoutFields[part]).map(key=>target[key] ?? '')
   ];
 }
 
@@ -65,6 +66,20 @@ function rememberLayout(target, part, before) {
   layoutHistory.get(target)[part].push(before);
 }
 
+const frameOptions = {
+  imageFit:['Como a foto preenche o quadro',['Preencher (pode cortar)','Mostrar foto inteira']],
+  imageFocusX:['Enquadramento horizontal',['Esquerda','Centro','Direita']],
+  imageFocusY:['Enquadramento vertical',['Topo','Centro','Base']],
+  textAlign:['Alinhamento do texto',['Esquerda','Centro','Direita']]
+};
+function frameControls(part,target) {
+  return Object.entries(RA.layoutFields[part]).map(([key,values]) => {
+    const [label,names] = frameOptions[key];
+    const options = values.map((value,index) =>
+      `<option value="${value}" ${target[key]===value?'selected':''}>${names[index]}</option>`).join('');
+    return `<label>${label}<select data-frame="${key}"><option value="">Padrão</option>${options}</select></label>`;
+  }).join('');
+}
 function moveControls(label, part, target) {
   return `<fieldset class="field" data-offset="${part}">
     <legend>${label}</legend>
@@ -76,6 +91,7 @@ function moveControls(label, part, target) {
       <button type="button" class="btn outline small" data-restore ${layoutHistory.get(target)?.[part].length ? '' : 'disabled'}>Restaurar</button>
     </div>
     <output aria-live="polite">${layoutSummary(target,part)}</output>
+    ${frameControls(part,target)}
   </fieldset>`;
 }
 function layoutSummary(target, part) {
@@ -84,6 +100,16 @@ function layoutSummary(target, part) {
 function bindMoves(root, target) {
   root.querySelectorAll('[data-offset]').forEach(group => {
     const part = group.dataset.offset;
+    group.onchange = event => {
+      const key = event.target.dataset.frame;
+      if (!Object.hasOwn(RA.layoutFields[part],key)) return;
+      const before = layoutSnapshot(target,part);
+      target[key] = event.target.value;
+      rememberLayout(target,part,before);
+      group.querySelector('[data-restore]').disabled = false;
+      dirty();
+      refresh(false);
+    };
     group.onclick = event => {
       const button = event.target.closest('button');
       if (!button) return;
@@ -93,6 +119,11 @@ function bindMoves(root, target) {
         const previous = layoutHistory.get(target)?.[part].pop();
         if (!previous) return;
         [target[part+'X'],target[part+'Y'],target[part+'Scale']] = previous;
+        group.querySelectorAll('[data-frame]').forEach((select,index) => {
+          const value = previous[index+3];
+          target[select.dataset.frame] = value;
+          select.value = value;
+        });
       } else if (button.dataset.size) {
         target[part+'Scale'] = RA.elementScale(RA.elementScale(target[part+'Scale']) + Number(button.dataset.size));
       } else {
@@ -149,7 +180,7 @@ preview.addEventListener('pointermove', event => {
   target[part+'X'] = RA.verticalOffset(drag.x + dx);
   target[part+'Y'] = RA.verticalOffset(drag.y + dy);
   elements.forEach(element => {
-    element.style.cssText = RA.layoutStyle(target,part)+';cursor:grabbing;touch-action:none;user-select:none';
+    element.style.cssText = RA.layoutStyle(target,part,!drag.product)+';cursor:grabbing;touch-action:none;user-select:none';
   });
 });
 function finishDrag(event) {

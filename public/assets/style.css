@@ -58,3 +58,7 @@
 }
 .preview.mobile .ra-store .nav { grid-template-columns: 1fr auto; }
 .preview.mobile .ra-store .navlinks { display: flex; grid-column: 1/-1; grid-row: 2; }
+
+.ra-store .banner .copy { align-items: var(--copy-align,start); }
+.ra-store .hero-copy h1, .ra-store .hero-copy p { margin-inline: 0; }
+.ra-store .hero-copy { display: flex; flex-direction: column; align-items: var(--copy-align,center); }
