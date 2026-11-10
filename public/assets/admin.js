@@ -62,7 +62,7 @@ function layoutSnapshot(target, part) {
 
 function rememberLayout(target, part, before) {
   if (layoutSnapshot(target,part).every((value,index) => value === before[index])) return;
-  if (!layoutHistory.has(target)) layoutHistory.set(target,{text:[],image:[]});
+  if (!layoutHistory.has(target)) layoutHistory.set(target,{text:[],image:[],section:[]});
   layoutHistory.get(target)[part].push(before);
 }
 
@@ -151,7 +151,10 @@ preview.addEventListener('dragstart', event => {
 preview.addEventListener('pointerdown', event => {
   if (drag || !event.isPrimary || event.button !== 0) return;
   suppressClick = false;
-  const element = event.target.closest('[data-layout-part]');
+  const handle = event.target.closest('[data-section-drag]');
+  const element = handle
+    ? handle.closest('[data-section]').querySelector('[data-layout-part="section"]')
+    : event.target.closest('[data-layout-part]:not([data-layout-part="section"])');
   if (!element || event.target.closest('select,input,textarea')) return;
   const section = element.closest('[data-section]');
   const product = element.closest('[data-layout-product]');
@@ -177,8 +180,11 @@ preview.addEventListener('pointermove', event => {
     drag.moved = true;
   }
   const {target,part,elements} = drag;
-  target[part+'X'] = RA.verticalOffset(drag.x + dx);
-  target[part+'Y'] = RA.verticalOffset(drag.y + dy);
+  const sectionZoom = part === 'section' ? 1 : RA.elementScale(
+    RA.getPage(state,pageId).sections.find(item => item.id === drag.section.dataset.section)?.sectionScale
+  ) / 100;
+  target[part+'X'] = RA.verticalOffset(drag.x + dx / sectionZoom);
+  target[part+'Y'] = RA.verticalOffset(drag.y + dy / sectionZoom);
   elements.forEach(element => {
     element.style.cssText = RA.layoutStyle(target,part,!drag.product)+';cursor:grabbing;touch-action:none;user-select:none';
   });
@@ -217,7 +223,7 @@ function renderProperty(){const root=$('#property'),p=RA.getPage(state,pageId);i
 if(tab==='pagina'){
   const sec=p.sections.find(x=>x.id===selected);
   root.innerHTML=`<h3>${sec?'Editar seção':'Páginas e seções'}</h3><p class="hint">Arraste fotos e textos na prévia. Clique na seção para editar o conteúdo e ajustar o tamanho.</p>`;
-  if(sec){root.innerHTML+=`<div class="card-admin"><strong>${e(sectionOptions.find(x=>x[0]===sec.type)?.[1]||sec.type)}</strong></div>`+field('Título','title',sec.title)+(['hero','products','text'].includes(sec.type)?field('Texto acima do título','eyebrow',sec.eyebrow??RA.sectionEyebrow(sec,state)):'')+((sec.type==='benefits')?`<div class="field"><label>Benefícios (um por linha)</label><textarea data-field="items" data-split="true">${e((sec.items||[]).join('\n'))}</textarea></div>`:field('Descrição','subtitle',sec.subtitle||'','textarea'))+(['hero','banner'].includes(sec.type)?field('Imagem (URL ou anexo)','image',sec.image||'')+imageUpload+field('Descrição da imagem','alt',sec.alt??RA.sectionAlt(sec))+field('Texto do botão','button',sec.button||''):'')+moveControls('Mover texto','text',sec)+(['hero','banner'].includes(sec.type)?moveControls('Mover foto','image',sec):'')+`<button class="btn outline" id="duplicate" style="width:100%;margin-top:10px">Duplicar seção</button><button class="btn outline" id="delSection" style="width:100%;margin-top:8px">Excluir seção</button>`;
+  if(sec){root.innerHTML+=`<div class="card-admin"><strong>${e(sectionOptions.find(x=>x[0]===sec.type)?.[1]||sec.type)}</strong></div>`+field('Título','title',sec.title)+(['hero','products','text'].includes(sec.type)?field('Texto acima do título','eyebrow',sec.eyebrow??RA.sectionEyebrow(sec,state)):'')+((sec.type==='benefits')?`<div class="field"><label>Benefícios (um por linha)</label><textarea data-field="items" data-split="true">${e((sec.items||[]).join('\n'))}</textarea></div>`:field('Descrição','subtitle',sec.subtitle||'','textarea'))+(['hero','banner'].includes(sec.type)?field('Imagem (URL ou anexo)','image',sec.image||'')+imageUpload+field('Descrição da imagem','alt',sec.alt??RA.sectionAlt(sec))+field('Texto do botão','button',sec.button||''):'')+moveControls('Seção inteira','section',sec)+moveControls('Mover texto','text',sec)+(['hero','banner'].includes(sec.type)?moveControls('Mover foto','image',sec):'')+`<button class="btn outline" id="duplicate" style="width:100%;margin-top:10px">Duplicar seção</button><button class="btn outline" id="delSection" style="width:100%;margin-top:8px">Excluir seção</button>`;
     bindFields(sec);bindImage(root,sec);bindMoves(root,sec);$('#duplicate').onclick=()=>{p.sections.splice(p.sections.indexOf(sec)+1,0,{...structuredClone(sec),id:uid()});dirty();refresh()};$('#delSection').onclick=()=>{if(!confirm('Excluir esta seção?'))return;p.sections=p.sections.filter(x=>x!==sec);selected=null;dirty();refresh()};
   }else{root.innerHTML+=`<div class="field"><label>Nome da página</label><input id="pageName" value="${e(p.name)}"></div><button class="btn outline" id="renamePage" style="width:100%">Renomear página</button><div class="field"><label>Adicionar nova seção</label><select class="input" id="newSection">${sectionOptions.map(x=>`<option value="${x[0]}">${x[1]}</option>`).join('')}</select></div><button class="btn" id="addSection" style="width:100%">+ Adicionar seção</button><div style="height:15px"></div><button class="btn outline" id="newPage" style="width:100%">+ Nova página</button><button class="btn outline" id="delPage" style="width:100%;margin-top:8px">Excluir página atual</button><p class="hint">Para alterar o menu, crie, renomeie ou exclua páginas aqui.</p>`;
     $('#renamePage').onclick=()=>{p.name=$('#pageName').value.slice(0,65)||p.name;dirty();refresh()};$('#addSection').onclick=()=>{const type=$('#newSection').value;p.sections.push({id:uid(),type,title:'Novo conteúdo',subtitle:'Edite esta descrição.',button:'Saiba mais',items:['Qualidade','Conforto','Atendimento'],image:'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1200&q=80'});selected=p.sections.at(-1).id;dirty();refresh()};$('#newPage').onclick=()=>{const name=prompt('Nome da nova página:','Nova página');if(!name)return;const id='pagina-'+uid();state.pages.push({id,name:name.slice(0,60),sections:[]});pageId=id;selected=null;dirty();refresh()};$('#delPage').onclick=()=>{if(state.pages.length<=1){alert('É necessário manter pelo menos uma página.');return}if(!confirm('Excluir esta página?'))return;state.pages=state.pages.filter(x=>x.id!==pageId);pageId=state.pages[0].id;dirty();refresh()}}

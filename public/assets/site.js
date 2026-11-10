@@ -18,7 +18,8 @@ function elementScale(value) {
 }
 const layoutFields = {
   image: {imageFit:['cover','contain'],imageFocusX:['0','50','100'],imageFocusY:['0','50','100']},
-  text: {textAlign:['left','center','right']}
+  text: {textAlign:['left','center','right']},
+  section: {}
 };
 function imageFrame(target) {
   const fit = layoutFields.image.imageFit.includes(target.imageFit) ? target.imageFit : 'cover';
@@ -30,6 +31,9 @@ function layoutStyle(target, part, frameImage=true) {
   const x = verticalOffset(target[part+'X']);
   const y = verticalOffset(target[part+'Y']);
   const scale = elementScale(target[part+'Scale']);
+  if (part === 'section') {
+    return 'position:relative;left:'+x+'px;top:'+y+'px;--section-zoom:'+scale/100+';width:'+Math.min(100,scale)+'%;margin-inline:auto';
+  }
   const position = x || y || scale !== 100 ? 'position:relative;left:'+x+'px;top:'+y+'px;scale:'+scale+'%;' : '';
   if (part === 'image' && frameImage) return position+imageFrame(target);
   const alignment = target.textAlign;
@@ -61,8 +65,9 @@ function sectionMarkup(sec,s,editor=false){const e=escapeHtml, wa=wha(s),cta=`${
  if(sec.type==='products')content=`<section id="produtos" class="section catalog-section"><div class="container">${categoryHighlights(s.products)}<div class="sectiontop"${layoutAttrs(sec,'text',editor)}><div><span class="eyebrow">${e(sec.eyebrow??sectionEyebrow(sec,s))}</span><h2>${e(sec.title)}</h2><p class="subtitle">${e(sec.subtitle||'')}</p></div><button type="button" class="btn outline small" data-clear-category hidden>Ver todos</button></div><div class="products">${s.products.filter(p=>p.active!==false).map(p=>`<article class="product" data-category="${e(p.category)}"${editor?` data-layout-product="${e(p.id)}"`:''}><div class="product-img"${layoutAttrs(p,'image',editor,false)}><img style="${imageFrame(p)}" src="${e(p.image)}" alt="${e(p.name)}" loading="lazy"></div><div class="product-body"${layoutAttrs(p,'text',editor)}><small>${e(p.category)}</small><h3>${e(p.name)}</h3><div class="price">${money(p.price)}</div><select class="select-size" aria-label="${e(copyText(s,'size'))}"><option value="">${e(copyText(s,'size'))}</option>${String(p.sizes||'').split(',').filter(Boolean).map(sz=>`<option value="${e(sz.trim())}">${e(sz.trim())}</option>`).join('')}</select><button class="btn small askproduct" data-name="${e(p.name)}">${e(copyText(s,'ask'))}</button></div></article>`).join('')}</div></div></section>`;
  if(sec.type==='banner')content=`<section class="section"><div class="container"><div class="banner"><div class="copy"${layoutAttrs(sec,'text',editor)}><h2>${e(sec.title)}</h2><p>${e(sec.subtitle)}</p><a class="btn" href="${cta}" target="_blank" rel="noopener">${e(sec.button||'Saiba mais')} →</a></div><img${layoutAttrs(sec,'image',editor)} src="${e(sec.image||'')}" alt="${e(sec.alt??sectionAlt(sec))}" loading="lazy"></div></div></section>`;
  if(sec.type==='text')content=`<section class="section"><div class="container"><div class="textcontent"${layoutAttrs(sec,'text',editor)}><span class="eyebrow">${e(sec.eyebrow??sectionEyebrow(sec,s))}</span><h2>${e(sec.title)}</h2><p class="subtitle">${e(sec.subtitle)}</p></div></div></section>`;
- if(editor)return `<div class="editable" data-section="${e(sec.id)}">${content}<div class="section-control"><button data-move="-1">↑</button><button data-move="1">↓</button></div></div>`;
- return content;
+ const frame = `<div class="section-frame" style="${layoutStyle(sec,'section')}"${editor?' data-layout-part="section"':''}><div style="zoom:var(--section-zoom)">${content}</div></div>`;
+ if(editor)return `<div class="editable" data-section="${e(sec.id)}">${frame}<div class="section-control"><button type="button" data-section-drag style="cursor:grab;touch-action:none">⠿ Arrastar seção</button><button data-move="-1" title="Mover seção para cima">↑</button><button data-move="1" title="Mover seção para baixo">↓</button></div></div>`;
+ return frame;
 }
 function renderSite(s,pageId,editor=false){const e=escapeHtml, p=getPage(s,pageId);document.documentElement.style.setProperty('--primary',s.theme?.primary||'#e63946');document.documentElement.style.setProperty('--dark',s.theme?.dark||'#101521');document.documentElement.style.setProperty('--surface',s.theme?.surface||'#f4f6fa');return `<div class="ra-store"><header class="head"><div class="container nav"><a class="brand" href="/">${e(s.brand||'RA CALÇADOS')}</a><nav class="navlinks">${s.pages.map(pg=>`<a class="${pg.id===p.id?'active':''}" href="${editor?'#':`/?pagina=${encodeURIComponent(pg.id)}`}" ${editor?`data-gopage="${e(pg.id)}"`:''}>${e(pg.name)}</a>`).join('')}</nav><a class="btn small" href="${wha(s)}" target="_blank" rel="noopener">${e(copyText(s,'whatsapp'))}</a></div></header><div class="topstrip">${e(copyText(s,'top'))}</div><main>${p.sections.map(sec=>sectionMarkup(sec,s,editor)).join('')}</main>${s.notice?`<div class="shopnotice">${e(s.notice)}</div>`:''}<footer class="footer"><div class="container"><div class="footergrid"><div><div class="brand">${e(s.brand||'RA CALÇADOS')}</div><p>${e(copyText(s,'tagline'))}</p></div><div><strong>${e(copyText(s,'contact'))}</strong><p>${e(copyText(s,'phone'))} ${e(s.whatsapp||'5516994623076')}</p>${s.instagram?`<p>${e(copyText(s,'instagram'))} ${e(s.instagram)}</p>`:''}</div></div><div class="footnote">© ${new Date().getFullYear()} ${e(s.brand||'RA CALÇADOS')}. ${e(copyText(s,'copyright'))}</div></div></footer>${editor?'':`<a class="floating-wa" href="${wha(s)}" target="_blank" rel="noopener">${e(copyText(s,'floating'))}</a>`}</div>`}
 function bindShop(root,s){
