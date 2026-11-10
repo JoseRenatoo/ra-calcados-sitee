@@ -1,3 +1,4 @@
+(() => {
 const e=RA.escapeHtml;const $=q=>document.querySelector(q);
 let state=null,pageId='inicio',selected=null,tab='pagina',aiProposal=null,modified=false;
 const uid=()=>Math.random().toString(36).slice(2,10);
@@ -34,3 +35,5 @@ $('#save').onclick=async()=>{notice('Publicando alterações...');try{const d=aw
 $('#download').onclick=()=>{if(!state)return;const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='backup-ra-calcados-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
 window.addEventListener('beforeunload',ev=>{if(modified){ev.preventDefault();ev.returnValue=''}});
 start().catch(err=>{console.error(err);$('#login').style.display='grid';$('#loginstatus').textContent='Falha ao iniciar o painel: '+err.message});
+
+})();
