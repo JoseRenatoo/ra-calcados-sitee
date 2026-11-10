@@ -49,6 +49,22 @@ function bindImage(root, target) {
     }
   };
 }
+const layoutHistory = new WeakMap();
+
+function layoutSnapshot(target, part) {
+  return [
+    RA.verticalOffset(target[part+'X']),
+    RA.verticalOffset(target[part+'Y']),
+    RA.elementScale(target[part+'Scale'])
+  ];
+}
+
+function rememberLayout(target, part, before) {
+  if (layoutSnapshot(target,part).every((value,index) => value === before[index])) return;
+  if (!layoutHistory.has(target)) layoutHistory.set(target,{text:[],image:[]});
+  layoutHistory.get(target)[part].push(before);
+}
+
 function moveControls(label, part, target) {
   return `<fieldset class="field" data-offset="${part}">
     <legend>${label}</legend>
@@ -57,7 +73,7 @@ function moveControls(label, part, target) {
       <button type="button" class="btn outline small" data-shift="4">↓ Descer</button>
       <button type="button" class="btn outline small" data-size="-5">− Diminuir</button>
       <button type="button" class="btn outline small" data-size="5">+ Aumentar</button>
-      <button type="button" class="btn outline small" data-restore>Restaurar</button>
+      <button type="button" class="btn outline small" data-restore ${layoutHistory.get(target)?.[part].length ? '' : 'disabled'}>Restaurar</button>
     </div>
     <output aria-live="polite">${layoutSummary(target,part)}</output>
   </fieldset>`;
@@ -71,15 +87,22 @@ function bindMoves(root, target) {
     group.onclick = event => {
       const button = event.target.closest('button');
       if (!button) return;
-      if (button.hasAttribute('data-restore')) {
-        target[part+'X'] = 0;
-        target[part+'Y'] = 0;
-        target[part+'Scale'] = 100;
+      const before = layoutSnapshot(target,part);
+      const restoring = button.hasAttribute('data-restore');
+      if (restoring) {
+        const previous = layoutHistory.get(target)?.[part].pop();
+        if (!previous) return;
+        [target[part+'X'],target[part+'Y'],target[part+'Scale']] = previous;
       } else if (button.dataset.size) {
         target[part+'Scale'] = RA.elementScale(RA.elementScale(target[part+'Scale']) + Number(button.dataset.size));
       } else {
         target[part+'Y'] = RA.verticalOffset(RA.verticalOffset(target[part+'Y']) + Number(button.dataset.shift));
       }
+      if (!restoring) {
+        if (layoutSnapshot(target,part).every((value,index) => value === before[index])) return;
+        rememberLayout(target,part,before);
+      }
+      group.querySelector('[data-restore]').disabled = !layoutHistory.get(target)?.[part].length;
       group.querySelector('output').textContent = layoutSummary(target,part);
       dirty();
       refresh(false);
@@ -110,7 +133,8 @@ preview.addEventListener('pointerdown', event => {
     .filter(node => node.dataset.layoutPart === part && (product || !node.closest('[data-layout-product]')));
   drag = {id:event.pointerId,target,part,elements,product,section,
     startX:event.clientX,startY:event.clientY,
-    x:RA.verticalOffset(target[part+'X']),y:RA.verticalOffset(target[part+'Y'])};
+    x:RA.verticalOffset(target[part+'X']),y:RA.verticalOffset(target[part+'Y']),
+    before:layoutSnapshot(target,part)};
 });
 preview.addEventListener('pointermove', event => {
   if (drag?.id !== event.pointerId) return;
@@ -134,6 +158,7 @@ function finishDrag(event) {
   drag = null;
   if (!completed.moved) return;
   if (event.type === 'pointerup') {
+    rememberLayout(completed.target,completed.part,completed.before);
     suppressClick = true;
     tab = completed.product ? 'produtos' : 'pagina';
     selected = completed.product ? null : completed.section.dataset.section;
