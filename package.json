@@ -1,0 +1,1 @@
+{"name":"ra-calcados-netlify-br","version":"1.0.0","private":true,"type":"module","scripts":{"build":"echo RA CALÇADOS pronto","dev":"netlify dev"},"dependencies":{"@netlify/blobs":"^9.1.2"}}
